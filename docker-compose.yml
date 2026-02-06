@@ -1,0 +1,100 @@
+version: '3.9'
+
+services:
+  # ─── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pharmacrm
+      POSTGRES_USER: pharmacrm_user
+      POSTGRES_PASSWORD: dev_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pharmacrm_user -d pharmacrm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── MinIO (S3-compatible object storage) ─────────────────────
+  minio:
+    image: minio/minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # ─── Backend ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: pharmacrm
+      DB_USER: pharmacrm_user
+      DB_PASSWORD: dev_password_change_me
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      AI_SERVICE_URL: http://ai-services:8000
+      AI_SERVICE_API_KEY: dev-ai-key
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      ENCRYPTION_IV: 0123456789abcdef0123456789abcdef
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── AI Services ──────────────────────────────────────────────
+  ai-services:
+    build:
+      context: ./ai-services
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      AI_SERVICE_API_KEY: dev-ai-key
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+  # ─── Frontend ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
