@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { ApiResponse } from '../types';
+import { config } from '../config';
 
 /**
  * Global error handler. Must be registered last in middleware chain.
@@ -40,7 +41,8 @@ export function errorHandler(
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
+      message: config.env === 'development' ? err.message : 'An unexpected error occurred',
+      details: config.env === 'development' ? err.stack : undefined,
     },
   };
 
